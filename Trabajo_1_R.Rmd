@@ -1,0 +1,266 @@
+---
+title: "Trabajo_1_R"
+author: "Esteban Rojas Henao"
+date: "4/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(readxl)
+library(corrplot)
+library(Hmisc)
+library(reshape2)
+library(corrgram)
+library(ggplot2)
+library(tidyverse)
+library(class)
+library(gmodels)
+library(caret)
+```
+
+**Objetivo:** Construir una herramienta para predecir el número de hijos de una persona que viven dentro del mismo hogar en Colombia a partir de ciertas variables disponibles.
+
+# Los datos
+
+Se trabajará con un 3 conjuntos de datos sobre la calidad de vida en Colombia. Disponibles en
+
+- [Características y composición del hogar](http://microdatos.dane.gov.co/index.php/catalog/678/datafile/F133)
+- [Datos de la vivienda](http://microdatos.dane.gov.co/index.php/catalog/678/datafile/F137)
+- [Educación](http://microdatos.dane.gov.co/index.php/catalog/678/datafile/F138)
+
+La definición de las variables del conjunto de datos se puede encontrar en
+
+[Definición variables](LINK DE GITHUB)
+
+La definición de las variables que se usarán es la siguiente:
+
+**DIRECTORIO:** Identificador del hogar
+
+**ORDEN:** Identificador de la persona dentro del hogar
+
+**P6020:** Sexo de la persona
+
+  1. Hombre
+  2. Mujer
+  
+**P6040:** Edad de la persona
+
+**relacion:** Estado sentimental de la persona
+
+  0. No informa
+  1. No está casado
+  2. Si está casado
+  
+**P756:** Lugar de nacimiento de la persona
+
+  1. En este municipio
+  2. En otro municipio
+  3. En otro país
+  
+**P6080:** De acuerdo con su cultura, se reconoce como
+
+  1. Indígena
+  2. Gitano(a)
+  3. Raizal del archipiélago de San Andrés, Providencia y Santa Catalina
+  4. Palenquero(a) de San Basilio
+  5. Negro(a), mulato(a) (afrodescendiente), afrocolombiano(a)
+  6. Ninguno de los anteriores
+  
+**P2057:** ¿Usted se considera campesino?
+
+  1. Si
+  2. No
+  3. No informa
+  
+**satisfaccion:** Satisfacción general de la persona teniendo en cuenta vida, ingreso, salud, nivel de seguridad y trabajo/actividad
+
+**vivienda:** Tipo de vivienda
+
+  1. Casa
+  2. Apartamento
+  3. Otro
+  
+**P8520S1:** ¿La vivienda cuenta con servicio de energía eléctrica?
+
+  1. Sí
+  2. No
+  
+**P8520S5:** ¿La vivienda cuenta con servicio de acueducto?
+
+  1. Sí
+  2. No
+  
+**P8520S3:** ¿La vivienda cuenta con servicio de alcantarillado?
+
+  1. Sí
+  2. No
+  
+**P8520S4:** ¿La vivienda cuenta con servicio de recolección de basuras?
+
+  1. Sí
+  2. No
+  
+**P6160:** ¿Sabe leer y escribir?
+
+  0. No informa
+  1. Sí
+  2. No
+  
+**P8587:** ¿Cuál es el nivel educativo más alto alcanzado?
+
+  0. No informa
+  1. Ninguno
+  2. Preescolar
+  3. Básica Primaria
+  4. Básica secundaria
+  5. Media
+  6. Técnico sin título
+  7. Técnico con título
+  8. Tecnológico sin título
+  9. Tecnológico con título
+  10. Universitario sin título
+  11. Universitario con título
+  12. Posgrado sin título
+  13. Posgrado con título
+
+
+# Análisis descriptivo
+
+Lectura de la base de datos:
+
+```{r}
+datos <- read_excel("Datos.xlsx")
+datos
+```
+
+Selección de las columnas que se analizarán:
+
+```{r}
+datos_sel <- subset(datos,select = c('P6020', 'P6040', 'relacion', 'P756', 'P6080', 'P2057', 'satisfaccion', 'vivienda', 'P8520S1', 'P8520S5', 'P8520S3', 'P8520S4', 'P6160', 'P8587', 'hijos'))
+names(datos_sel) = c('sexo', 'edad', 'relacion', 'nacimiento', 'cultura', 'campesino', 'satisfaccion', 'vivienda', 'energia', 'acueducto', 'alcantarillado', 'basura', 'leer_escribir', 'nivel_educativo', 'hijos')
+```
+
+## Medidas de localización y escala
+
+```{r}
+kable(summary(datos_sel),caption = "Medidas de localización")
+```
+
+```{r}
+kable(t(apply(datos_sel,2,sd)),caption = "Desviaciones estándar")
+```
+
+## Gráficos descriptivos 
+
+### Gráficos de barras
+#### Situación sentimental, sexo, lugar de nacimiento, cultura, si se considera campesino y tipo de vivienda
+```{r}
+par(mfrow=c(2, 3))
+
+barplot(table(datos_sel$relacion), xlab='¿Casado?', ylab='Frecuencia', main='Gráfico de la situación\nsentimental', col=c('indianred', 'steelblue'), sub='0. No informa 1. No 2. Si')
+
+barplot(table(datos_sel$sexo), xlab='Sexo', ylab='Frecuencia', main='Gráfico del sexo', sub='1: Hombre 2: Mujer', col=c('steelblue', 'indianred'))
+
+barplot(table(datos_sel$nacimiento), xlab='Lugar de Nacimiento', ylab='Frecuencia', main='Gráfico del lugar de nacimiento', col=c('indianred', 'steelblue', 'darkorchid'))
+legend('topright', legend=c('1: Este municipio', '2: Otro municipio', '3: Otro país'), x.intersp=0)
+
+barplot(table(datos_sel$cultura), xlab='Cultura', ylab='Frecuencia', main='Gráfico de la cultura', col=c('indianred', 'steelblue', 'darkorchid'))
+legend('topleft', legend=c('1: Indígena', '3: Gitano(a)', '3: Raizal', '4: Palenquero(a)', '5: Negro(a)', '6: Ninguno'), x.intersp=0)
+
+barplot(table(datos_sel$campesino), xlab='Campesino', ylab='Frecuencia', main='¿Se considera campesino?', col=c('indianred', 'steelblue', 'darkorchid'), sub='1: Si 2: No 3: No informa')
+
+barplot(table(datos_sel$vivienda), xlab='Tipo de Vivienda', ylab='Frecuencia', main='Tipo de vivienda', col=c('indianred', 'steelblue', 'darkorchid'))
+legend('topright', legend=c('1: Casa', '2: Apartamento', '3: Otro'))
+```
+
+#### Servicios que tiene el hogar (Energía, Acueducto, Alcantarillado, Recolección de basuras)
+```{r}
+par(mfrow=c(2, 2))
+
+barplot(table(datos_sel$energia), xlab='Energía', ylab='Frecuencia', main='Servicio de energía', col=c('indianred', 'steelblue', 'darkorchid'), sub='1: Si 2: No')
+
+barplot(table(datos_sel$acueducto), xlab='Acueducto', ylab='Frecuencia', main='Servicio de acueducto', col=c('indianred', 'steelblue', 'darkorchid'), sub='1: Si 2: No')
+
+barplot(table(datos_sel$alcantarillado), xlab='Alcantarillado', ylab='Frecuencia', main='Servicio de alcantarillado', col=c('indianred', 'steelblue', 'darkorchid'), sub='1: Si 2: No')
+
+barplot(table(datos_sel$basura), xlab='Recolección de Basuras', ylab='Frecuencia', main='Servicio de recolección de basuras', col=c('indianred', 'steelblue', 'darkorchid'), sub='1: Si 2: No')
+```
+
+#### Educación: Sabe leer y escribir
+``` {r}
+par(mfrow=c(1, 2))
+barplot(table(datos_sel$leer_escribir), xlab='Sabe leer y escribir', ylab='Frecuencia', main='¿Sabe leer y escribir?', col=c('indianred', 'steelblue', 'darkorchid'), sub='0: No informa 1: Si 2: No')
+```
+ 
+### Histogramas
+#### Edad, Satisfacción con la vida, nivel educativo y número de hijos
+```{r}
+par(mfrow=c(2, 2))
+
+hist(datos_sel$edad, xlab='Edad', ylab='Frecuencia', main='Histograma de la edad', col='steelblue')
+
+hist(datos_sel$satisfaccion, xlab='Satisfacción', ylab='Frecuencia', main='Histograma de la satisfacción', col='indianred')
+
+hist(datos_sel$nivel_educativo, xlab='Nivel Educativo', ylab='Frecuencia', main='Histograma del nivel educativo', col='indianred')
+
+hist(datos_sel$hijos, xlab='Número de hijos', ylab='Frecuencia', main='Histograma del número de hijos', col='steelblue')
+```
+
+## Exploración de relaciones
+
+```{r}
+cormat <- round(cor(na.omit(datos_sel)),2) # Matriz de correlación
+
+# Diagonal inferior de la matriz
+get_lower_tri<-function(cormat){
+  cormat[upper.tri(cormat)] <- NA
+  return(cormat)
+}
+
+# Diagonal superior de la matriz
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+  
+upper_tri <- get_upper_tri(cormat)
+
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+reorder_cormat <- function(cormat){
+  # Usa la correlación entre variables como la distancia
+  dd <- as.dist((1-cormat)/2)
+  hc <- hclust(dd)
+  cormat <-cormat[hc$order, hc$order]
+}
+
+# Reordena la matriz con los colores
+cormat <- reorder_cormat(cormat)
+upper_tri <- get_upper_tri(cormat)
+
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+# Print the heatmap
+print(ggheatmap)
+```
+
+
+### Conclusión del análisis descriptivo
+Se aprecian algunas relaciones entre las variables de la base de datos y la variable respuesta, sin embargo ninguna tiene una alta correlación con la variable de respuesta T-T
+
+## Modelamiento
+
+Este problema se modelará con el método de los $K$ vecinos más cercanos.
+
+# Acá termina, la creación del modelo no fue realizada 
